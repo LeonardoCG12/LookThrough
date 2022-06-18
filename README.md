@@ -12,7 +12,7 @@
   </summary>
   <ol>
     <li>
-      <a href="#como-usar">Como Usar</a>
+      <a href="#como-usar">Como usar</a>
     </li>
   </ol>
 </details>
@@ -21,12 +21,12 @@
 
 ### Você pode executar este script de duas formas:
 
-Passar Diretório como argumento
+Passar diretório como argumento
 
 ```sh
 ./lookthrough /caminho/absoluto/ate/o/diretorio/
 ```
-Passar diretório com o script em execução
+Passar diretório com o Script em execução
 
 ```sh
 ./lookthrough

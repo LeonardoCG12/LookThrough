@@ -10,17 +10,27 @@ import (
 	"strings"
 )
 
+const (
+	_  = iota
+	KB = 1 << (iota * 10)
+	MB
+	GB
+	TB
+)
+
 type vars struct {
-	fileCount   int
-	hashCount   int
-	hashList    []string
-	hashListAll []string
-	home        string
-	num         string
-	mem         map[string]int
-	newPath     string
-	myPath      string
-	sep         string
+	fileCount      int
+	hashCount      int
+	hashList       []string
+	hashListAll    []string
+	home           string
+	num            string
+	mem            map[string]int
+	newPath        string
+	myPath         string
+	sep            string
+	sizeCount      int64
+	totalSizeCount int64
 }
 
 func (v *vars) makeNewDir() {
@@ -52,7 +62,7 @@ func (v *vars) refactorPath() string {
 	return v.myPath
 }
 
-func (v *vars) getMD5Checksum(filePath string, fileName string) {
+func (v *vars) getMD5Checksum(filePath string, fileName string, fileSize int64) {
 	file, err := ioutil.ReadFile(filePath)
 
 	if err != nil {
@@ -68,15 +78,17 @@ func (v *vars) getMD5Checksum(filePath string, fileName string) {
 
 	checksum := fmt.Sprintf("%x", hasher.Sum(nil))
 
-	v.saveHash(fileName, file, checksum)
+	v.saveHash(fileName, fileSize, file, checksum)
 }
 
-func (v *vars) saveHash(fileName string, file []byte, md5Sum string) {
+func (v *vars) saveHash(fileName string, fileSize int64, file []byte, md5Sum string) {
 	value, isThere := v.mem[fileName]
 	look4Hash := v.look4Hashes(fileName, md5Sum)
 
 	if look4Hash == 1 {
 		v.hashCount += 1
+
+		v.saveSize(true, fileSize)
 
 		if isThere {
 			v.mem[fileName] += 1
@@ -98,6 +110,8 @@ func (v *vars) saveHash(fileName string, file []byte, md5Sum string) {
 		v.hashCount += 1
 		v.mem[fileName] = 0
 
+		v.saveSize(true, fileSize)
+
 		v.hashList = append(v.hashList, fileName, md5Sum)
 		filePath := fmt.Sprintf("%s%s%s", v.newPath, v.sep, fileName)
 		err := ioutil.WriteFile(filePath, file, 0644)
@@ -109,6 +123,17 @@ func (v *vars) saveHash(fileName string, file []byte, md5Sum string) {
 	}
 
 	v.hashListAll = append(v.hashListAll, fileName, md5Sum)
+
+	v.saveSize(false, fileSize)
+}
+
+func (v *vars) saveSize(isNew bool, fileSize int64) {
+
+	if isNew {
+		v.sizeCount += fileSize
+	} else {
+		v.totalSizeCount += fileSize
+	}
 
 }
 
@@ -147,7 +172,7 @@ func (v *vars) look4Files() {
 
 		if !info.IsDir() && checkDir != newPathDir {
 			v.fileCount += 1
-			v.getMD5Checksum(path, info.Name())
+			v.getMD5Checksum(path, info.Name(), info.Size())
 		}
 
 		return nil
@@ -158,13 +183,32 @@ func (v *vars) look4Files() {
 	}
 
 	if v.verifyFiles() {
+		size, unit := getSize(v.totalSizeCount-v.sizeCount)
+
 		fmt.Print("\n[+] SUCCESS\n")
 		fmt.Print("[+] ALL FILES HAVE BEEN COPIED\n")
 		fmt.Printf("\n>>> Old Files: %d\n", v.fileCount)
-		fmt.Printf(">>> New Files: %d\n\n", v.hashCount)
+		fmt.Printf(">>> New Files: %d\n", v.hashCount)
+		fmt.Printf(">>> Freed Storage: %.1f%s\n\n", size, unit)
 	} else {
 		fmt.Print("\n[-] FAIL\n")
 		fmt.Print("[-] SOMETHING WENT WRONG\n\n")
+	}
+
+}
+
+func getSize(size int64) (float64, string) {
+
+	if size < KB {
+		return float64(size), "B"
+	} else if size < MB {
+		return float64(size) / KB, "KB"
+	} else if size < GB {
+		return float64(size) / MB, "MB"
+	} else if size < TB {
+		return float64(size) / GB, "GB"
+	} else {
+		return float64(size) / TB, "TB"
 	}
 
 }
@@ -206,6 +250,8 @@ func main() {
 		newPath:     "",
 		myPath:      "",
 		sep:         fmt.Sprintf("%c", os.PathSeparator),
+		sizeCount: 0,
+		totalSizeCount: 0,
 	}
 
 	iv.makeNewDir()
