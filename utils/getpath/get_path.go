@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-func GetPath(home string, separator string) string {
+func GetPath(home, separator string) string {
 	var myPath string
 
 	if len(os.Args) > 1 {
@@ -22,12 +22,26 @@ func GetPath(home string, separator string) string {
 	return myPath
 }
 
-func GetNewPath(myPath string, separator string) string {
+func GetNewPath(myPath, separator string) string {
 	var newPath string
 
 	myPath = strings.TrimSuffix(myPath, separator)
 	arr := strings.Split(myPath, separator)
-	newPath = fmt.Sprintf("%s/new-%s", myPath, arr[len(arr)-1])
+	newPath = fmt.Sprintf("%s%snew-%s", myPath, separator, arr[len(arr)-1])
 
 	return newPath
+}
+
+func GetNewFilePath(newPath, separator, fileName, num string, status int) string {
+
+	if status == 1 {
+		arr := strings.Split(fileName, ".")
+		newFilePath := fmt.Sprintf("%s%s%s(%s).%s", newPath, separator, arr[0], num, arr[len(arr)-1])
+
+		return newFilePath
+	}
+
+	newFilePath := fmt.Sprintf("%s%s%s", newPath, separator, fileName)
+
+	return newFilePath
 }

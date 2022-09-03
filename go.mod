@@ -1,3 +1,3 @@
-module github.com/LeonardoCG12/Look-Through-Go
+module github.com/LeonardoCG12/LookThrough
 
 go 1.19
