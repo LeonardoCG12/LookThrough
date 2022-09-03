@@ -9,7 +9,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/LeonardoCG12/Look-Through-Go/variables"
+	"github.com/LeonardoCG12/LookThrough/utils/getpath"
+	"github.com/LeonardoCG12/LookThrough/utils/handlefile"
+	"github.com/LeonardoCG12/LookThrough/variables"
 )
 
 const (
@@ -28,34 +30,31 @@ func NewLookThrough(lookThrough variables.LookThroughVars) *LookThrough {
 	return &LookThrough{LookThrough: lookThrough}
 }
 
-func (l *LookThrough) getMD5Checksum(filePath string, fileName string, fileSize int64) {
-	fin, err := os.Open(filePath)
-
-	if err != nil {
-		log.Fatal(err)
-	}
+func (l *LookThrough) getMD5Checksum(filePath, fileName string, fileSize int64) {
+	fin := handlefile.ReadFile(filePath)
 
 	defer fin.Close()
 
 	hasher := md5.New()
 
-	_, err = io.Copy(hasher, fin)
+	_, err := io.Copy(hasher, fin)
 
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	checksum := fmt.Sprintf("%x", hasher.Sum(nil))
+	md5Sum := fmt.Sprintf("%x", hasher.Sum(nil))
 
-	l.saveHash(fileName, fileSize, filePath, checksum)
+	l.saveHash(fileName, filePath, md5Sum, fileSize)
 }
 
-func (l *LookThrough) saveHash(fileName string, fileSize int64, filePath string, md5Sum string) {
+func (l *LookThrough) saveHash(fileName, filePath, md5Sum string, fileSize int64) {
 	value, isThere := l.LookThrough.Mem[fileName]
 	lookForHash := l.lookForHashes(fileName, md5Sum)
 
 	if lookForHash == 1 {
 		l.LookThrough.HashCount += 1
+		l.LookThrough.HashList = append(l.LookThrough.HashList, fileName, md5Sum)
 
 		l.saveSize(true, fileSize)
 
@@ -66,60 +65,20 @@ func (l *LookThrough) saveHash(fileName string, fileSize int64, filePath string,
 			l.LookThrough.Num = ""
 		}
 
-		l.LookThrough.HashList = append(l.LookThrough.HashList, fileName, md5Sum)
-		arr := strings.Split(fileName, ".")
-		newFilePath := fmt.Sprintf("%s%s%s(%s).%s", l.LookThrough.NewPath, l.LookThrough.Separator, arr[0], l.LookThrough.Num, arr[len(arr)-1])
-		fin, err := os.Open(filePath)
+		newFilePath := getpath.GetNewFilePath(l.LookThrough.NewPath, l.LookThrough.Separator, fileName, l.LookThrough.Num, lookForHash)
 
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		defer fin.Close()
-
-		fout, err := os.Create(newFilePath)
-
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		defer fout.Close()
-
-		_, err = io.Copy(fout, fin)
-
-		if err != nil {
-			log.Fatal(err)
-		}
+		handlefile.CopyFile(filePath, newFilePath)
 
 	} else if lookForHash == 2 {
 		l.LookThrough.HashCount += 1
 		l.LookThrough.Mem[fileName] = 0
+		l.LookThrough.HashList = append(l.LookThrough.HashList, fileName, md5Sum)
 
 		l.saveSize(true, fileSize)
 
-		l.LookThrough.HashList = append(l.LookThrough.HashList, fileName, md5Sum)
-		newFilePath := fmt.Sprintf("%s%s%s", l.LookThrough.NewPath, l.LookThrough.Separator, fileName)
-		fin, err := os.Open(filePath)
+		newFilePath := getpath.GetNewFilePath(l.LookThrough.NewPath, l.LookThrough.Separator, fileName, "", lookForHash)
 
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		defer fin.Close()
-
-		fout, err := os.Create(newFilePath)
-
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		defer fout.Close()
-
-		_, err = io.Copy(fout, fin)
-
-		if err != nil {
-			log.Fatal(err)
-		}
+		handlefile.CopyFile(filePath, newFilePath)
 
 	}
 
@@ -128,7 +87,7 @@ func (l *LookThrough) saveHash(fileName string, fileSize int64, filePath string,
 	l.saveSize(false, fileSize)
 }
 
-func (l *LookThrough) lookForHashes(fileName string, md5Sum string) int {
+func (l *LookThrough) lookForHashes(fileName, md5Sum string) int {
 
 	for _, element := range l.LookThrough.HashList {
 
@@ -154,6 +113,8 @@ func (l *LookThrough) LookForFiles() {
 	newPathDir := arr[len(arr)-1]
 
 	err := filepath.Walk(l.LookThrough.MyPath, func(path string, info os.FileInfo, err error) error {
+		name := info.Name()
+		size := info.Size()
 		arr = strings.Split(path, l.LookThrough.Separator)
 		checkDir := arr[len(arr)-2]
 
@@ -161,9 +122,13 @@ func (l *LookThrough) LookForFiles() {
 			log.Fatal(err)
 		}
 
-		if !info.IsDir() && checkDir != newPathDir {
-			l.LookThrough.FileCount += 1
-			l.getMD5Checksum(path, info.Name(), info.Size())
+		if name != "desktop.ini" && name != "thumbs.db" && name != ".DS_Store" {
+
+			if !info.IsDir() && checkDir != newPathDir {
+				l.LookThrough.FileCount += 1
+				l.getMD5Checksum(path, name, size)
+			}
+
 		}
 
 		return nil
@@ -181,6 +146,10 @@ func (l *LookThrough) LookForFiles() {
 		fmt.Printf(">>> Old Files: %d\n", l.LookThrough.FileCount)
 		fmt.Printf(">>> New Files: %d\n", l.LookThrough.HashCount)
 		fmt.Printf(">>> Freed Storage: %.1f%s\n\n", size, unit)
+	} else if l.LookThrough.FileCount == 0 {
+		fmt.Print("\n[-] FAIL\n")
+		fmt.Print("[-] NO FILES FOUND\n\n")
+		os.Remove(l.LookThrough.NewPath)
 	} else {
 		fmt.Print("\n[-] FAIL\n")
 		fmt.Print("[-] SOMETHING WENT WRONG\n\n")
