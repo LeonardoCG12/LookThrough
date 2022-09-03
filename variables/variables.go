@@ -5,10 +5,10 @@ type LookThroughVars struct {
 	HashCount      int
 	HashList       []string
 	HashListAll    []string
-	Num            string
 	Mem            map[string]int
-	NewPath        string
 	MyPath         string
+	NewPath        string
+	Num            string
 	Separator      string
 	SizeCount      int64
 	TotalSizeCount int64

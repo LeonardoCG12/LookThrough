@@ -1,12 +1,12 @@
 package main
 
 import (
-	"github.com/LeonardoCG12/Look-Through-Go/create"
-	"github.com/LeonardoCG12/Look-Through-Go/lookthrough"
-	"github.com/LeonardoCG12/Look-Through-Go/utils/gethome"
-	"github.com/LeonardoCG12/Look-Through-Go/utils/getpath"
-	"github.com/LeonardoCG12/Look-Through-Go/utils/getseparator"
-	"github.com/LeonardoCG12/Look-Through-Go/variables"
+	"github.com/LeonardoCG12/LookThrough/create"
+	"github.com/LeonardoCG12/LookThrough/lookthrough"
+	"github.com/LeonardoCG12/LookThrough/utils/gethome"
+	"github.com/LeonardoCG12/LookThrough/utils/getpath"
+	"github.com/LeonardoCG12/LookThrough/utils/getseparator"
+	"github.com/LeonardoCG12/LookThrough/variables"
 )
 
 func main() {
@@ -20,10 +20,10 @@ func main() {
 		HashCount:      0,
 		HashList:       []string{},
 		HashListAll:    []string{},
-		Num:            "",
 		Mem:            map[string]int{},
-		NewPath:        getNewPath,
 		MyPath:         getPath,
+		NewPath:        getNewPath,
+		Num:            "",
 		Separator:      getSeparator,
 		SizeCount:      0,
 		TotalSizeCount: 0,
