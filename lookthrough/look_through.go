@@ -4,10 +4,14 @@ import (
 	"crypto/md5"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"path/filepath"
-	"strings"
+	"sync"
+
+	"io/fs"
+	"slices"
+
+	"golang.org/x/sync/errgroup"
 
 	"github.com/LeonardoCG12/LookThrough/utils/getpath"
 	"github.com/LeonardoCG12/LookThrough/utils/handlefile"
@@ -23,142 +27,167 @@ const (
 )
 
 type LookThrough struct {
-	LookThrough variables.LookThroughVars
+	Vars variables.LookThroughVars
+	mu   sync.Mutex
 }
 
-func NewLookThrough(lookThrough variables.LookThroughVars) *LookThrough {
-	return &LookThrough{LookThrough: lookThrough}
+func NewLookThrough(vars variables.LookThroughVars) *LookThrough {
+	if vars.Mem == nil {
+		vars.Mem = make(map[string]int)
+	}
+	vars.HashList = []variables.FileHash{}
+	vars.HashListAll = []variables.FileHash{}
+	return &LookThrough{Vars: vars}
 }
 
-func (l *LookThrough) getMD5Checksum(filePath, fileName string, fileSize int64) {
-	fin := handlefile.ReadFile(filePath)
-
+func (l *LookThrough) getMD5Checksum(filePath, fileName string, fileSize int64) error {
+	fin, err := handlefile.ReadFile(filePath)
+	if err != nil {
+		return err
+	}
 	defer fin.Close()
 
 	hasher := md5.New()
-
-	_, err := io.Copy(hasher, fin)
-
-	if err != nil {
-		log.Fatal(err)
+	if _, err := io.Copy(hasher, fin); err != nil {
+		return err
 	}
-
 	md5Sum := fmt.Sprintf("%x", hasher.Sum(nil))
-
-	l.saveHash(fileName, filePath, md5Sum, fileSize)
+	return l.saveHash(fileName, filePath, md5Sum, fileSize)
 }
 
-func (l *LookThrough) saveHash(fileName, filePath, md5Sum string, fileSize int64) {
-	value, isThere := l.LookThrough.Mem[fileName]
-	lookForHash := l.lookForHashes(fileName, md5Sum)
+func (l *LookThrough) saveHash(fileName, filePath, md5Sum string, fileSize int64) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 
-	if lookForHash == 1 {
-		l.LookThrough.HashCount += 1
-		l.LookThrough.HashList = append(l.LookThrough.HashList, fileName, md5Sum)
+	l.Vars.Num = ""
+	status := l.lookForHashes(fileName, md5Sum)
+	var newFilePath string
 
-		l.saveSize(true, fileSize)
-
-		if isThere {
-			l.LookThrough.Mem[fileName] += 1
-			l.LookThrough.Num = fmt.Sprintf("%d", value+1)
+	if status == 1 {
+		l.Vars.HashCount++
+		l.Vars.HashList = append(l.Vars.HashList, variables.FileHash{Name: fileName, Hash: md5Sum})
+		value := l.Vars.Mem[fileName]
+		if value > 0 {
+			l.Vars.Mem[fileName] = value + 1
+			l.Vars.Num = fmt.Sprintf("%d", value+1)
 		} else {
-			l.LookThrough.Num = ""
+			l.Vars.Mem[fileName] = 1
+			l.Vars.Num = ""
 		}
-
-		newFilePath := getpath.GetNewFilePath(l.LookThrough.NewPath, l.LookThrough.Separator, fileName, l.LookThrough.Num, lookForHash)
-
-		handlefile.CopyFile(filePath, newFilePath)
-
-	} else if lookForHash == 2 {
-		l.LookThrough.HashCount += 1
-		l.LookThrough.Mem[fileName] = 0
-		l.LookThrough.HashList = append(l.LookThrough.HashList, fileName, md5Sum)
-
-		l.saveSize(true, fileSize)
-
-		newFilePath := getpath.GetNewFilePath(l.LookThrough.NewPath, l.LookThrough.Separator, fileName, "", lookForHash)
-
-		handlefile.CopyFile(filePath, newFilePath)
-
+		newFilePath = getpath.GetNewFilePath(l.Vars.NewPath, l.Vars.Separator, fileName, l.Vars.Num, status)
+		l.Vars.SizeCount += fileSize
+	} else if status == 2 {
+		l.Vars.HashCount++
+		l.Vars.Mem[fileName] = 0
+		l.Vars.HashList = append(l.Vars.HashList, variables.FileHash{Name: fileName, Hash: md5Sum})
+		newFilePath = getpath.GetNewFilePath(l.Vars.NewPath, l.Vars.Separator, fileName, "", status)
+		l.Vars.SizeCount += fileSize
 	}
 
-	l.LookThrough.HashListAll = append(l.LookThrough.HashListAll, fileName, md5Sum)
+	l.Vars.HashListAll = append(l.Vars.HashListAll, variables.FileHash{Name: fileName, Hash: md5Sum})
+	l.Vars.TotalSizeCount += fileSize
 
-	l.saveSize(false, fileSize)
+	if status == 1 || status == 2 {
+		if err := handlefile.CopyFile(filePath, newFilePath); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (l *LookThrough) lookForHashes(fileName, md5Sum string) int {
-
-	for _, element := range l.LookThrough.HashList {
-
-		if md5Sum == element {
+	for _, fh := range l.Vars.HashList {
+		if fh.Hash == md5Sum {
 			return 0
 		}
-
 	}
-
-	for _, element := range l.LookThrough.HashList {
-
-		if fileName == element {
+	for _, fh := range l.Vars.HashList {
+		if fh.Name == fileName {
 			return 1
 		}
-
 	}
-
 	return 2
 }
 
-func (l *LookThrough) LookForFiles() {
-	arr := strings.Split(l.LookThrough.NewPath, l.LookThrough.Separator)
-	newPathDir := arr[len(arr)-1]
+func (l *LookThrough) LookForFiles() error {
+	newPathDir := filepath.Base(l.Vars.NewPath)
 
-	err := filepath.Walk(l.LookThrough.MyPath, func(path string, info os.FileInfo, err error) error {
-		name := info.Name()
-		size := info.Size()
-		arr = strings.Split(path, l.LookThrough.Separator)
-		checkDir := arr[len(arr)-2]
-
+	var g errgroup.Group
+	err := filepath.WalkDir(l.Vars.MyPath, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
-			log.Fatal(err)
+			return err
 		}
 
-		if name != "desktop.ini" && name != "thumbs.db" && name != ".DS_Store" {
-
-			if !info.IsDir() && checkDir != newPathDir {
-				l.LookThrough.FileCount += 1
-				l.getMD5Checksum(path, name, size)
-			}
-
+		if d.IsDir() {
+			return nil
 		}
+		name := d.Name()
+		if name == "desktop.ini" || name == "thumbs.db" || name == ".DS_Store" {
+			return nil
+		}
+		parentDir := filepath.Base(filepath.Dir(path))
+		if parentDir == newPathDir {
+			return nil
+		}
+
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+
+		l.mu.Lock()
+		l.Vars.FileCount++
+		l.mu.Unlock()
+
+		fileName := name
+		size := info.Size()
+		g.Go(func() error {
+			return l.getMD5Checksum(path, fileName, size)
+		})
 
 		return nil
 	})
-
 	if err != nil {
-		log.Fatal(err)
+		return err
+	}
+
+	if err := g.Wait(); err != nil {
+		return err
 	}
 
 	if l.verifyFiles() {
-		size, unit := getSize(l.LookThrough.TotalSizeCount - l.LookThrough.SizeCount)
-
+		size, unit := getSize(l.Vars.TotalSizeCount - l.Vars.SizeCount)
 		fmt.Print("\n[+] SUCCESS\n")
 		fmt.Print("[+] ALL FILES HAVE BEEN COPIED\n\n")
-		fmt.Printf(">>> Old Files: %d\n", l.LookThrough.FileCount)
-		fmt.Printf(">>> New Files: %d\n", l.LookThrough.HashCount)
+		fmt.Printf(">>> Old Files: %d\n", l.Vars.FileCount)
+		fmt.Printf(">>> New Files: %d\n", l.Vars.HashCount)
 		fmt.Printf(">>> Freed Storage: %.1f%s\n\n", size, unit)
-	} else if l.LookThrough.FileCount == 0 {
+	} else if l.Vars.FileCount == 0 {
 		fmt.Print("\n[-] FAIL\n")
 		fmt.Print("[-] NO FILES FOUND\n\n")
-		os.Remove(l.LookThrough.NewPath)
+		os.Remove(l.Vars.NewPath)
 	} else {
 		fmt.Print("\n[-] FAIL\n")
 		fmt.Print("[-] SOMETHING WENT WRONG\n\n")
 	}
+	return nil
+}
 
+func (l *LookThrough) verifyFiles() bool {
+	for _, all := range l.Vars.HashListAll {
+		hashes := make([]string, len(l.Vars.HashList))
+		for i, fh := range l.Vars.HashList {
+			hashes[i] = fh.Hash
+		}
+		if !slices.Contains(hashes, all.Hash) {
+			return false
+		}
+	}
+	return true
 }
 
 func getSize(size int64) (float64, string) {
-
 	if size < KB {
 		return float64(size), "B"
 	} else if size < MB {
@@ -170,38 +199,4 @@ func getSize(size int64) (float64, string) {
 	} else {
 		return float64(size) / TB, "TB"
 	}
-
-}
-
-func (l *LookThrough) saveSize(isNew bool, fileSize int64) {
-
-	if isNew {
-		l.LookThrough.SizeCount += fileSize
-	} else {
-		l.LookThrough.TotalSizeCount += fileSize
-	}
-
-}
-
-func (l *LookThrough) verifyFiles() bool {
-	var integrity bool
-
-start:
-
-	for i := 1; i < len(l.LookThrough.HashListAll); i += 2 {
-
-		for j := 1; j < len(l.LookThrough.HashList); j += 2 {
-
-			if l.LookThrough.HashListAll[i] == l.LookThrough.HashList[j] {
-				integrity = true
-				continue start
-			} else {
-				integrity = false
-			}
-
-		}
-
-	}
-
-	return integrity
 }

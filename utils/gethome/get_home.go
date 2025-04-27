@@ -1,16 +1,13 @@
 package gethome
 
 import (
-	"log"
 	"os"
 )
 
-func GetHome() string {
+func GetHome() (string, error) {
 	home, err := os.UserHomeDir()
-
 	if err != nil {
-		log.Fatal(err)
+		return "", err
 	}
-
-	return home
+	return home, nil
 }

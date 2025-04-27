@@ -2,40 +2,26 @@ package handlefile
 
 import (
 	"io"
-	"log"
 	"os"
 )
 
-func ReadFile(filePath string) *os.File {
-	fin, err := os.Open(filePath)
-
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	return fin
+func ReadFile(filePath string) (*os.File, error) {
+	return os.Open(filePath)
 }
 
-func CopyFile(filePath, newFilePath string) {
+func CopyFile(filePath, newFilePath string) error {
 	fin, err := os.Open(filePath)
-
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
-
 	defer fin.Close()
 
 	fout, err := os.Create(newFilePath)
-
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
-
 	defer fout.Close()
 
 	_, err = io.Copy(fout, fin)
-
-	if err != nil {
-		log.Fatal(err)
-	}
+	return err
 }

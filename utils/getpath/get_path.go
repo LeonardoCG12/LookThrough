@@ -3,6 +3,7 @@ package getpath
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -18,30 +19,20 @@ func GetPath(home, separator string) string {
 
 	myPath = strings.Replace(myPath, "~", home, -1)
 	myPath = strings.TrimSuffix(myPath, separator)
-
 	return myPath
 }
 
 func GetNewPath(myPath, separator string) string {
-	var newPath string
-
-	myPath = strings.TrimSuffix(myPath, separator)
-	arr := strings.Split(myPath, separator)
-	newPath = fmt.Sprintf("%s%snew-%s", myPath, separator, arr[len(arr)-1])
-
-	return newPath
+	base := filepath.Base(myPath)
+	return filepath.Join(myPath, "new-"+base)
 }
 
 func GetNewFilePath(newPath, separator, fileName, num string, status int) string {
-
 	if status == 1 {
-		arr := strings.Split(fileName, ".")
-		newFilePath := fmt.Sprintf("%s%s%s(%s).%s", newPath, separator, arr[0], num, arr[len(arr)-1])
-
-		return newFilePath
+		ext := filepath.Ext(fileName)
+		name := strings.TrimSuffix(fileName, ext)
+		newName := fmt.Sprintf("%s(%s)%s", name, num, ext)
+		return filepath.Join(newPath, newName)
 	}
-
-	newFilePath := fmt.Sprintf("%s%s%s", newPath, separator, fileName)
-
-	return newFilePath
+	return filepath.Join(newPath, fileName)
 }

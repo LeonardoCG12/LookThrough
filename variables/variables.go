@@ -1,10 +1,15 @@
 package variables
 
+type FileHash struct {
+	Name string
+	Hash string
+}
+
 type LookThroughVars struct {
 	FileCount      int
 	HashCount      int
-	HashList       []string
-	HashListAll    []string
+	HashList       []FileHash
+	HashListAll    []FileHash
 	Mem            map[string]int
 	MyPath         string
 	NewPath        string

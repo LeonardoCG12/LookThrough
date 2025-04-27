@@ -10,7 +10,7 @@ import (
 )
 
 func main() {
-	home := gethome.GetHome()
+	home, _ := gethome.GetHome()
 	getSeparator := getseparator.GetSeparator()
 	getPath := getpath.GetPath(home, getSeparator)
 	getNewPath := getpath.GetNewPath(getPath, getSeparator)
@@ -18,8 +18,8 @@ func main() {
 	vars := variables.LookThroughVars{
 		FileCount:      0,
 		HashCount:      0,
-		HashList:       []string{},
-		HashListAll:    []string{},
+		HashList:       []variables.FileHash{},
+		HashListAll:    []variables.FileHash{},
 		Mem:            map[string]int{},
 		MyPath:         getPath,
 		NewPath:        getNewPath,
