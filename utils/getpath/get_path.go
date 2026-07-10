@@ -2,37 +2,43 @@ package getpath
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 )
 
-func GetPath(home, separator string) string {
-	var myPath string
+func GetPath(homeDir, separator, pathArg string, cliArgs []string) string {
+	var targetPath string
 
-	if len(os.Args) > 1 {
-		myPath = os.Args[1]
+	if pathArg != "" {
+		targetPath = pathArg
+	} else if len(cliArgs) > 0 {
+		targetPath = cliArgs[0]
 	} else {
 		fmt.Print("Choose a directory to look through: ")
-		fmt.Scanf("%s", &myPath)
+		fmt.Scanf("%s", &targetPath)
 	}
 
-	myPath = strings.Replace(myPath, "~", home, -1)
-	myPath = strings.TrimSuffix(myPath, separator)
-	return myPath
+	absPath, err := filepath.Abs(targetPath)
+	if err == nil {
+		targetPath = absPath
+	}
+
+	return targetPath
 }
 
-func GetNewPath(myPath, separator string) string {
-	base := filepath.Base(myPath)
-	return filepath.Join(myPath, "new-"+base)
+func GetNewPath(targetPath, separator string) string {
+	baseName := filepath.Base(targetPath)
+	return filepath.Join(targetPath, "new-"+baseName)
 }
 
-func GetNewFilePath(newPath, separator, fileName, num string, status int) string {
+func GetNewFilePath(newPath, separator, fileName, fileNumber string, status int) string {
 	if status == 1 {
-		ext := filepath.Ext(fileName)
-		name := strings.TrimSuffix(fileName, ext)
-		newName := fmt.Sprintf("%s(%s)%s", name, num, ext)
-		return filepath.Join(newPath, newName)
+		fileExtension := filepath.Ext(fileName)
+		baseName := strings.TrimSuffix(fileName, fileExtension)
+		newFileName := fmt.Sprintf("%s(%s)%s", baseName, fileNumber, fileExtension)
+
+		return filepath.Join(newPath, newFileName)
 	}
+
 	return filepath.Join(newPath, fileName)
 }

@@ -10,6 +10,8 @@ type LookThroughVars struct {
 	HashCount      int
 	HashList       []FileHash
 	HashListAll    []FileHash
+	HashMap        map[string]bool
+	NameMap        map[string]bool
 	Mem            map[string]int
 	MyPath         string
 	NewPath        string
