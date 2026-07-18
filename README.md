@@ -139,4 +139,11 @@ If an empty folder or unsupported structure is matched:
 [-] NO FILES FOUND
 ```
 
+If a critical fail-safe is triggered due to internal data anomalies or memory inconsistencies during execution:
+
+```text
+[-] FAIL
+[-] SOMETHING WENT WRONG
+```
+
 <p align="right">[<a href="#top">Back to top</a>]</p>
