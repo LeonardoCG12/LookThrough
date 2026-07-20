@@ -11,6 +11,7 @@ func PrintProgressBar(current, total int32) {
 	}
 
 	updateInterval := int32(1)
+
 	if total > 1000 {
 		updateInterval = 10
 	} else if total > 100 {
@@ -23,6 +24,7 @@ func PrintProgressBar(current, total int32) {
 		completed := int(float64(barLength) * float64(current) / float64(total))
 
 		bar := strings.Repeat("=", completed)
+
 		if completed < barLength {
 			bar += ">"
 			bar += strings.Repeat("-", barLength-completed-1)

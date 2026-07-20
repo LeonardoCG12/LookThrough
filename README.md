@@ -24,6 +24,7 @@
         <li><a href="#3-interactive-mode">3. Interactive Mode</a></li>
       </ul>
     </li>
+    <li><a href="#file-categorization-summary">File Categorization Summary</a></li>
     <li><a href="#system-exclusions">System Exclusions</a></li>
     <li><a href="#sample-output">Sample Output</a></li>
   </ol>
@@ -56,6 +57,8 @@
 - **RAM Throttling Protection:** Monitors memory overhead proactively via system checks, automatically pausing workers if RAM usage peaks to prevent out-of-memory (OOM) crashes.
 - **Flexible Input Methods:** Supports both automated infrastructure scripting via command-line flags and human-centric interactive inputs.
 - **Human-Readable Output:** Automatically converts byte-level storage sizes into human-readable strings (B, KB, MB, GB, TB) for better visibility.
+- **Intelligent File Categorization:** Automatically organizes files into specialized folders based on extension (e.g., `Documents`, `Images`, `Electronics_Automation`, `Programming`). This feature is triggered by the `-s` flag, making post-processing cleanup significantly faster.
+- **Interactive Directory Management:** When the output directory already exists, LookThrough now prompts you to safely decide whether to `delete` the existing contents or `amend` the directory, preventing accidental data loss.
 
 ---
 
@@ -85,11 +88,12 @@ LookThrough offers three seamless execution paradigms to fit into manual testing
 Target a directory directly and initialize a visual feedback bar in your shell terminal interface using flags:
 
 ```sh
-./lookthrough -p /absolute/path/to/target/directory -b
+./lookthrough -p /absolute/path/to/target/directory -b -s
 ```
 
 - `-p` : Explicit string pathway pointing directly towards your target directory folder.
 - `-b` : Boolean flag instructing the script engine to render a visual console loading indicator.
+- `-s` : Boolean flag enabling automatic file sorting by extension into categorized folders.
 
 ### 2. Passing the Directory Directly
 
@@ -107,6 +111,27 @@ Run the built application binary blindly without passing tracking arguments to e
 ./lookthrough
 Choose a directory to look through: /absolute/path/to/target/directory
 ```
+
+If the target folder (e.g., `new-MyFolder`) already exists, LookThrough will pause and ask for your preference:
+
+```text
+[!] The folder 'new-MyFolder' already exists.
+[?] Do you want to delete its content or amend it? (d/a):
+```
+
+- `d` (delete): Wipes the existing directory contents before starting.
+- `a` (amend): Keeps existing files and proceeds with the scan.
+
+## File Categorization Summary
+
+When using the `-s` flag, LookThrough organizes your files into predefined categories. Specifically tailored for engineering workflows, it includes:
+
+- **Images**: Collects image formats including `.jpg`, `.jpeg`, `.png`, `.gif`, `.bmp`, and `.svg`.
+- **Videos**: Organizes video files including `.mp4`, `.mov`, `.avi`, `.mkv`, and `.wmv`.
+- **Audio**: Categorizes audio files including `.mp3`, `.wav`, `.flac`, `.aac`, and `.ogg`.
+- **Electronics_Automation**: Organizes files including `.ino`, `.hex`, `.plc`, `.l5x`, and `.awl`.
+- **Design_3D_CAD**: Categorizes formats like `.step`, `.stl`, `.obj`, and `.sldprt`.
+- **Programming**: Captures common source code files including `.go`, `.py`, `.c`, `.cpp`, `.rs`, and `.js`.
 
 ## System Exclusions
 
