@@ -21,6 +21,7 @@ func CalculateDynamicLimit() int {
 
 func ThrottleIfMemoryHigh() {
 	var mem runtime.MemStats
+
 	runtime.ReadMemStats(&mem)
 
 	if mem.Alloc > 500*1024*1024 {
