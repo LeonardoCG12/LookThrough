@@ -1,14 +1,16 @@
 package lookthrough
 
-func (l *LookThrough) verifyFiles() bool {
-	hashSet := make(map[string]bool)
+import "github.com/LeonardoCG12/LookThrough/src/utils/variables"
 
-	for _, fh := range l.Vars.HashList {
-		hashSet[fh.Hash] = true
+func (l *LookThrough) verifyFiles() bool {
+	hashSet := make(map[variables.Digest]struct{}, len(l.Vars.HashList))
+
+	for _, fileHash := range l.Vars.HashList {
+		hashSet[fileHash.Hash] = struct{}{}
 	}
 
-	for _, all := range l.Vars.HashListAll {
-		if !hashSet[all.Hash] {
+	for _, scannedFile := range l.Vars.HashListAll {
+		if _, exists := hashSet[scannedFile.Hash]; !exists {
 			return false
 		}
 	}
