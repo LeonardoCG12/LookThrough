@@ -1,13 +1,14 @@
 package lookthrough
 
 import (
-	"crypto/md5"
+	"crypto/sha256"
 	"fmt"
 	"io"
-	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
+	"sync"
 
-	"github.com/LeonardoCG12/LookThrough/src/utils/getpath"
 	"github.com/LeonardoCG12/LookThrough/src/utils/handlefile"
 	"github.com/LeonardoCG12/LookThrough/src/utils/sortfile"
 	"github.com/LeonardoCG12/LookThrough/src/utils/variables"
@@ -19,102 +20,147 @@ const (
 	StatusNewFile         = 2
 )
 
-func (l *LookThrough) getMD5Checksum(fileName, filePath string) (string, error) {
+var bufferPool = sync.Pool{
+	New: func() any {
+		buffer := make([]byte, 128*1024)
+		return &buffer
+	},
+}
+
+func (l *LookThrough) getSHA256Checksum(fileName, filePath string) (variables.Digest, error) {
 	fin, err := handlefile.ReadFile(filePath)
-
 	if err != nil {
-		return "", fmt.Errorf("error reading file %s: %w", fileName, err)
+		return variables.Digest{}, fmt.Errorf("failed to open file '%s': %w", fileName, err)
 	}
-
 	defer fin.Close()
 
-	hasher := md5.New()
+	hasher := sha256.New()
 
-	if _, err := io.Copy(hasher, fin); err != nil {
-		return "", fmt.Errorf("error hashing file %s: %w", fileName, err)
+	bufferPointer := bufferPool.Get().(*[]byte)
+	defer bufferPool.Put(bufferPointer)
+
+	if _, err := io.CopyBuffer(hasher, fin, *bufferPointer); err != nil {
+		return variables.Digest{}, fmt.Errorf("failed to generate sha256 hash for '%s': %w", fileName, err)
 	}
 
-	md5Sum := fmt.Sprintf("%x", hasher.Sum(nil))
+	var digest variables.Digest
+	copy(digest[:], hasher.Sum(nil))
 
-	return md5Sum, nil
+	return digest, nil
 }
 
 func (l *LookThrough) saveHash(fileName, filePath string, fileSize int64) error {
+	digest, err := l.getSHA256Checksum(fileName, filePath)
+	if err != nil {
+		return err
+	}
+
+	status, targetPath, nameKey := l.reserveDestination(fileName, digest, fileSize)
+	if status == StatusDuplicate {
+		return nil
+	}
+
+	targetDirectory := filepath.Dir(targetPath)
+	if err := l.ensureDirectory(targetDirectory); err != nil {
+		l.rollbackReservation(digest, nameKey)
+		return err
+	}
+
+	if err := handlefile.CopyFile(filePath, targetPath, l.Vars.SafeCopy); err != nil {
+		l.rollbackReservation(digest, nameKey)
+		return fmt.Errorf("failed to copy file '%s' to destination: %w", fileName, err)
+	}
+
 	l.mu.Lock()
 
-	var newFilePath string
-
-	md5Sum, _ := l.getMD5Checksum(fileName, filePath)
-	status := l.lookForHashes(fileName, md5Sum)
-
-	l.Vars.Num = ""
-
-	switch status {
-	case StatusConflictingName:
-		value := l.Vars.Mem[fileName]
-
-		l.Vars.HashList = append(l.Vars.HashList, variables.FileHash{Name: fileName, Hash: md5Sum})
-		l.Vars.HashMap[md5Sum] = true
-
-		l.Vars.HashCount++
-
-		if value > 0 {
-			l.Vars.Mem[fileName] = value + 1
-			l.Vars.Num = fmt.Sprintf("%d", value+1)
-		} else {
-			l.Vars.Mem[fileName] = 1
-			l.Vars.Num = "1"
-		}
-
-		newFilePath = getpath.GetNewFilePath(l.Vars.NewPath, fileName, l.Vars.Num, 1)
-		l.Vars.SizeCount += fileSize
-
-	case StatusNewFile:
-		l.Vars.Mem[fileName] = 0
-		l.Vars.HashList = append(l.Vars.HashList, variables.FileHash{Name: fileName, Hash: md5Sum})
-		l.Vars.HashMap[md5Sum] = true
-		newFilePath = getpath.GetNewFilePath(l.Vars.NewPath, fileName, "", 2)
-
-		l.Vars.SizeCount += fileSize
-		l.Vars.HashCount++
+	if l.Vars.VerifyFiles {
+		l.Vars.HashList = append(l.Vars.HashList, variables.FileHash{
+			Name: filepath.Base(targetPath),
+			Hash: digest,
+		})
 	}
 
-	l.Vars.NameMap[fileName] = true
-	l.Vars.HashListAll = append(l.Vars.HashListAll, variables.FileHash{Name: fileName, Hash: md5Sum})
-
-	l.Vars.TotalSizeCount += fileSize
+	l.Vars.SizeCount += fileSize
+	l.Vars.HashCount++
 
 	l.mu.Unlock()
-
-	if status != StatusDuplicate && (status == StatusConflictingName || status == StatusNewFile) {
-
-		if l.Vars.SortFile {
-			category := sortfile.GetCategory(fileName)
-			targetDir := filepath.Join(l.Vars.NewPath, category)
-
-			if err := os.MkdirAll(targetDir, 0755); err != nil {
-				return fmt.Errorf("error creating directory %s: %w", targetDir, err)
-			}
-
-			newFilePath = filepath.Join(targetDir, filepath.Base(newFilePath))
-		}
-
-		if err := handlefile.CopyFile(filePath, newFilePath); err != nil {
-			return fmt.Errorf("error copying file %s: %w", fileName, err)
-		}
-	}
 
 	return nil
 }
 
-func (l *LookThrough) lookForHashes(fileName, md5Sum string) int {
-	if l.Vars.HashMap[md5Sum] {
-		return StatusDuplicate
+func (l *LookThrough) reserveDestination(fileName string, digest variables.Digest, fileSize int64) (status int, targetPath, nameKey string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	l.Vars.TotalSizeCount += fileSize
+
+	if l.Vars.VerifyFiles {
+		l.Vars.HashListAll = append(l.Vars.HashListAll, variables.FileHash{
+			Name: fileName,
+			Hash: digest,
+		})
 	}
 
-	if l.Vars.NameMap[fileName] {
-		return StatusConflictingName
+	if _, exists := l.Vars.HashMap[digest]; exists {
+		return StatusDuplicate, "", ""
 	}
 
-	return StatusNewFile
+	targetDirectory := l.Vars.NewPath
+	if l.Vars.SortFile {
+		targetDirectory = filepath.Join(targetDirectory, sortfile.GetCategory(fileName))
+	}
+
+	baseKey := destinationNameKey(l.Vars.NewPath, targetDirectory, fileName)
+	reservedName := fileName
+	status = StatusNewFile
+
+	if _, exists := l.Vars.NameMap[baseKey]; exists {
+		status = StatusConflictingName
+		counter := l.Vars.Mem[baseKey] + 1
+
+		for {
+			candidateName := addNumericSuffix(fileName, counter)
+			candidateKey := destinationNameKey(l.Vars.NewPath, targetDirectory, candidateName)
+
+			if _, inUse := l.Vars.NameMap[candidateKey]; !inUse {
+				reservedName = candidateName
+				nameKey = candidateKey
+				l.Vars.Mem[baseKey] = counter
+				break
+			}
+
+			counter++
+		}
+	} else {
+		nameKey = baseKey
+		l.Vars.Mem[baseKey] = 0
+	}
+
+	l.Vars.HashMap[digest] = struct{}{}
+	l.Vars.NameMap[nameKey] = struct{}{}
+
+	return status, filepath.Join(targetDirectory, reservedName), nameKey
+}
+
+func (l *LookThrough) rollbackReservation(digest variables.Digest, nameKey string) {
+	l.mu.Lock()
+	delete(l.Vars.HashMap, digest)
+	delete(l.Vars.NameMap, nameKey)
+	l.mu.Unlock()
+}
+
+func destinationNameKey(rootDirectory, targetDirectory, fileName string) string {
+	relativeDirectory, err := filepath.Rel(rootDirectory, targetDirectory)
+	if err != nil || relativeDirectory == "." {
+		return fileName
+	}
+
+	return filepath.Join(relativeDirectory, fileName)
+}
+
+func addNumericSuffix(fileName string, number int) string {
+	extension := filepath.Ext(fileName)
+	baseName := strings.TrimSuffix(fileName, extension)
+
+	return baseName + "(" + strconv.Itoa(number) + ")" + extension
 }

@@ -2,10 +2,10 @@ package main
 
 import (
 	"flag"
-	"fmt"
-	"os"
+	"log"
 
 	"github.com/LeonardoCG12/LookThrough/src/lookthrough"
+	"github.com/LeonardoCG12/LookThrough/src/utils/gethardware"
 	"github.com/LeonardoCG12/LookThrough/src/utils/getpath"
 	"github.com/LeonardoCG12/LookThrough/src/utils/handlefolder"
 	"github.com/LeonardoCG12/LookThrough/src/utils/variables"
@@ -14,45 +14,44 @@ import (
 func main() {
 	barFlag := flag.Bool("b", false, "Enable visual progress bar")
 	pathFlag := flag.String("p", "", "Target directory path to scan")
-	sortFLag := flag.Bool("s", false, "Enable file sorting by extension")
+	sortFlag := flag.Bool("s", false, "Enable file sorting by extension")
+	workersFlag := flag.Int("j", 0, "Number of concurrent workers (0 = automatic; manual range: 1 to 128)")
+	verifyFlag := flag.Bool("verify", false, "Enable in-memory hash consistency check")
+	safeCopyFlag := flag.Bool("safe-copy", false, "Copy through temporary files before finalizing destinations")
+	ignoreDirectoryErrorsFlag := flag.Bool("ignore-directory-errors", false, "Skip unreadable source directories and report them instead of failing")
 
 	flag.Parse()
+	log.SetFlags(0)
 
-	getPath, err := getpath.GetPath(*pathFlag, flag.Args())
-
+	workers, err := gethardware.ResolveWorkerLimit(*workersFlag)
 	if err != nil {
-		fmt.Printf("[!] CRITICAL ERROR: %v\n", err)
-		os.Exit(1)
+		log.Fatalf("[!] CRITICAL ERROR: %v\n", err)
 	}
 
-	getNewPath := getpath.GetNewPath(getPath)
-
-	folderInspect, err := handlefolder.MakeNewDir(getNewPath)
-
+	targetPath, err := getpath.GetPath(*pathFlag, flag.Args())
 	if err != nil {
-		fmt.Printf("[!] CRITICAL ERROR: %v\n", err)
-		os.Exit(1)
+		log.Fatalf("[!] CRITICAL ERROR: %v\n", err)
+	}
+
+	newPath := getpath.GetNewPath(targetPath)
+
+	folderInspect, err := handlefolder.MakeNewDir(newPath)
+	if err != nil {
+		log.Fatalf("[!] CRITICAL ERROR: %v\n", err)
 	}
 
 	vars := variables.LookThroughVars{
-		FileCount:       0,
-		HashCount:       0,
-		HashList:        []variables.FileHash{},
-		HashListAll:     []variables.FileHash{},
-		HashMap:         make(map[string]bool),
-		NameMap:         make(map[string]bool),
-		Mem:             map[string]int{},
-		MyPath:          getPath,
-		NewPath:         getNewPath,
-		Num:             "",
-		ShowProgressBar: *barFlag,
-		SizeCount:       0,
-		SortFile:        *sortFLag,
-		TotalSizeCount:  0,
+		MyPath:                targetPath,
+		NewPath:               newPath,
+		IgnoreDirectoryErrors: *ignoreDirectoryErrorsFlag,
+		SafeCopy:              *safeCopyFlag,
+		ShowProgressBar:       *barFlag,
+		SortFile:              *sortFlag,
+		VerifyFiles:           *verifyFlag,
+		Workers:               workers,
 	}
 
 	if err := lookthrough.NewLookThrough(vars).LookForFiles(folderInspect); err != nil {
-		fmt.Printf("[!] CRITICAL ERROR: %v\n", err)
-		os.Exit(1)
+		log.Fatalf("[!] CRITICAL ERROR: %v\n", err)
 	}
 }

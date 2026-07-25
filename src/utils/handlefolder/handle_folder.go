@@ -24,17 +24,17 @@ func MakeNewDir(newPath string) (bool, error) {
 			if input == "d" || input == "delete" {
 				folderInspect = false
 
-				fmt.Printf("[+] Deleting existing contents...\n\n")
+				fmt.Printf("[+] Deleting existing contents...\n")
 
 				if err := os.RemoveAll(newPath); err != nil {
-					return folderInspect, fmt.Errorf("error deleting directory: %w", err)
+					return folderInspect, fmt.Errorf("failed to delete existing directory '%s': %w", newPath, err)
 				}
 
 				break
 			} else if input == "a" || input == "amend" {
 				folderInspect = true
 
-				fmt.Printf("[+] Amending existing directory...\n\n")
+				fmt.Printf("[+] Amending existing directory...\n")
 
 				return folderInspect, nil
 			} else {
@@ -44,7 +44,7 @@ func MakeNewDir(newPath string) (bool, error) {
 	}
 
 	if err := os.MkdirAll(newPath, 0755); err != nil {
-		return folderInspect, fmt.Errorf("error creating directory: %w", err)
+		return folderInspect, fmt.Errorf("failed to create directory '%s': %w", newPath, err)
 	}
 
 	return folderInspect, nil
