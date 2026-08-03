@@ -228,7 +228,7 @@ A successful execution currently prints output similar to:
 [+] UNIQUE FILES HAVE BEEN COPIED
 
 >>> Source Files Scanned: 1245
->>> Unique Files Copied This Run: 912
+>>> Unique Files Copied: 912
 >>> Duplicate Data Skipped: 4.2GB
 ```
 
